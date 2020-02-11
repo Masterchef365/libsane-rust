@@ -428,6 +428,7 @@ impl<'device, 'sane> Iterator for OptionDescriptorIterator<'device, 'sane> {
     type Item = OptionDescriptor<'device>;
     fn next(&mut self) -> Option<Self::Item> {
         unsafe {
+            println!("ATTEMPTING READ: {}", self.position);
             let ptr = sane_get_option_descriptor(self.device.get_handle(), self.position);
             if ptr.is_null() {
                 None
