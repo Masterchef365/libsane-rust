@@ -5,6 +5,7 @@
 use libsane_sys::*;
 use std::{ffi::CStr, fmt, marker::PhantomData};
 pub struct LibSane;
+use std::num::NonZeroI32;
 
 impl LibSane {
     pub fn init() -> Result<Self, SaneError> {
@@ -124,6 +125,10 @@ impl Device<'_> {
             handle,
             _phantomdata: PhantomData,
         })
+    }
+
+    pub(crate) fn get_handle(&self) -> SANE_Handle {
+        self.handle
     }
 }
 
@@ -265,10 +270,29 @@ pub struct Capabilities {
     pub advanced: bool,
 }
 
-// TODO: TryFrom?
 impl From<SANE_Int> for Capabilities {
     fn from(cap: SANE_Int) -> Self {
-        todo!()
+        let software_settable = cap >> 0 & 1 == 1;
+        let hardware_settable = cap >> 1 & 1 == 1;
+        let software_visible = cap >> 2 & 1 == 1;
+        let emulated = cap >> 3 & 1 == 1;
+        let automatic = cap >> 4 & 1 == 1;
+        let inactive = cap >> 5 & 1 == 1;
+        let advanced = cap >> 6 & 1 == 1;
+
+        let settable = match (software_settable, hardware_settable) {
+            (true, false) => Settable::Software,
+            (false, true) => Settable::Hardware { software_visible },
+            _ => panic!("Invalid capability bitfield"),
+        };
+
+        Self {
+            settable,
+            emulated,
+            automatic,
+            inactive,
+            advanced,
+        }
     }
 }
 
@@ -284,7 +308,15 @@ pub enum ValueType {
 
 impl From<SANE_Value_Type> for ValueType {
     fn from(vt: SANE_Value_Type) -> Self {
-        todo!()
+        match vt {
+            SANE_Value_Type_SANE_TYPE_BOOL => ValueType::Bool,
+            SANE_Value_Type_SANE_TYPE_BUTTON => ValueType::Int,
+            SANE_Value_Type_SANE_TYPE_FIXED => ValueType::Fixed,
+            SANE_Value_Type_SANE_TYPE_GROUP => ValueType::String,
+            SANE_Value_Type_SANE_TYPE_INT => ValueType::Button,
+            SANE_Value_Type_SANE_TYPE_STRING => ValueType::Group,
+            _ => panic!("Invalid value type"),
+        }
     }
 }
 
@@ -292,22 +324,56 @@ impl From<SANE_Value_Type> for ValueType {
 pub enum Constraint<'a> {
     None,
     Range {
-        min: u32,
-        max: u32,
-        quant: Option<std::num::NonZeroU32>,
+        min: i32,
+        max: i32,
+        quant: Option<NonZeroI32>,
     },
     List(&'a [SANE_Word]),
     StringList(Vec<&'a CStr>),
 }
 
+/// Traverses a null terminated list of C strings
+fn null_term_cstring_list<'a>(list: *const SANE_String_Const) -> Vec<&'a CStr> {
+    let mut i = 0;
+    let mut strings = Vec::new();
+    unsafe {
+        loop {
+            let ptr = list.wrapping_offset(i);
+            if (*ptr).is_null() {
+                break strings;
+            } else {
+                strings.push(CStr::from_ptr(*ptr));
+            }
+            i += 1;
+        }
+    }
+}
+
 impl<'a> Constraint<'a> {
-    pub(crate) fn new(constraint_type: SANE_Constraint_Type, value_ptr: &SANE_Option_Descriptor__bindgen_ty_1) -> Self {
-        match constraint_type {
-            SANE_Constraint_Type_SANE_CONSTRAINT_NONE => Constraint::None,
-            SANE_Constraint_Type_SANE_CONSTRAINT_RANGE => todo!(),
-            SANE_Constraint_Type_SANE_CONSTRAINT_STRING_LIST => todo!(),
-            SANE_Constraint_Type_SANE_CONSTRAINT_WORD_LIST => todo!(),
-            _ => panic!("Unrecognized constraint type"),
+    pub(crate) fn new(
+        constraint_type: SANE_Constraint_Type,
+        value_ptr: &SANE_Option_Descriptor__bindgen_ty_1,
+    ) -> Self {
+        unsafe {
+            match constraint_type {
+                SANE_Constraint_Type_SANE_CONSTRAINT_NONE => Constraint::None,
+                SANE_Constraint_Type_SANE_CONSTRAINT_RANGE => {
+                    let range = *value_ptr.range;
+                    Constraint::Range {
+                        min: range.min,
+                        max: range.max,
+                        quant: NonZeroI32::new(range.max),
+                    }
+                },
+                SANE_Constraint_Type_SANE_CONSTRAINT_STRING_LIST => Constraint::StringList(null_term_cstring_list(value_ptr.string_list)),
+                SANE_Constraint_Type_SANE_CONSTRAINT_WORD_LIST => { 
+                    let length = *value_ptr.word_list.wrapping_offset(0);
+                    let contents = value_ptr.word_list.wrapping_offset(1);
+                    let list = std::slice::from_raw_parts(contents, length as usize);
+                    Constraint::List(list)
+                },
+                _ => panic!("Unrecognized constraint type"),
+            }
         }
     }
 }
@@ -334,6 +400,40 @@ impl<'a> OptionDescriptor<'a> {
                 unit: descriptor.unit.into(),
                 size: descriptor.size,
                 value_type: descriptor.type_.into(),
+            }
+        }
+    }
+}
+
+pub struct OptionDescriptorIterator<'device, 'sane> {
+    device: &'device Device<'sane>,
+    length: SANE_Int,
+    position: SANE_Int,
+}
+
+impl<'device, 'sane> OptionDescriptorIterator<'device, 'sane> {
+    pub fn new(device: &'device Device<'sane>) -> Self {
+        //let ptr = sane_get_option_descriptor(device.get_handle(), 0);
+        //let length_descriptor = OptionDescriptor::from_descriptor(&*ptr);
+        let length = 1; //TODO
+        Self {
+            device,
+            length,
+            position: 0,//1,
+        }
+    }
+}
+
+impl<'device, 'sane> Iterator for OptionDescriptorIterator<'device, 'sane> {
+    type Item = OptionDescriptor<'device>;
+    fn next(&mut self) -> Option<Self::Item> {
+        unsafe {
+            let ptr = sane_get_option_descriptor(self.device.get_handle(), self.position);
+            if ptr.is_null() {
+                None
+            } else {
+                self.position += 1;
+                Some(OptionDescriptor::from_descriptor(&*ptr))
             }
         }
     }

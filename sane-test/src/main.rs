@@ -12,13 +12,17 @@ use libsane::*;
 
 fn main() -> Result<(), SaneError> {
     let sane = LibSane::init()?;
-    let devices = sane.get_devices(true)?;
+    //let devices = sane.get_devices(true)?;
     /*
     for device in devices.iter() {
         println!("{}", device.name.to_str().unwrap());
     }
     */
     let device = sane.open("plustek:libusb:001:006")?;
+    let options = OptionDescriptorIterator::new(&device);
+    for option in options {
+        println!("{:#?}", option);
+    }
     /*
     let devices = SaneDeviceList::get_devices(&sane, true)?;
     for device in devices.iter() {
