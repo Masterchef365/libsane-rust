@@ -6,15 +6,17 @@ mod device_list;
 mod device;
 mod option_descriptor;
 pub use error::{SaneError, Result};
-use device_list::DeviceList;
-use device::Device;
+pub use device_list::{DeviceListIter, DeviceDescription};
+pub use device::Device;
+pub use option_descriptor::*;
 
 use libsane_sys::*;
 
-/// Libsane C library representation
+/// LibSANE C library representation
 pub struct LibSane;
 
 impl LibSane {
+    /// Initialize the LibSANE library
     pub fn init(callback: SANE_Auth_Callback) -> Result<Self> {
         let mut version: i32 = 0;
         unsafe {
@@ -23,11 +25,13 @@ impl LibSane {
         }
     }
 
-    pub fn device_names<'a>(&'a self, local_only: bool) -> Result<DeviceList<'a>> {
-        DeviceList::get_devices(self, local_only)
+    /// Return an iterator over available device descriptions
+    pub fn list_devices<'a>(&'a self, local_only: bool) -> Result<DeviceListIter<'a>> {
+        DeviceListIter::new(self, local_only)
     }
 
-    pub fn open<'a>(&'a self, name: &str) -> Result<Device<'a>> {
+    /// Open the device with name `name`
+    pub fn open_device<'a>(&'a self, name: &str) -> Result<Device<'a>> {
         let name = std::ffi::CString::new(name).expect("Invalid C String");
         Device::open_device(&name)
     }

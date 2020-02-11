@@ -3,11 +3,11 @@ use libsane_sys::*;
 use crate::{device::Device, LibSane, error::{Result, SaneError}};
 
 #[derive(Debug)]
-pub struct DeviceDescription<'devlist> {
-    pub name: &'devlist CStr,
-    pub vendor: &'devlist CStr,
-    pub model: &'devlist CStr,
-    pub type_: &'devlist CStr,
+pub struct DeviceDescription<'sane> {
+    pub name: &'sane CStr,
+    pub vendor: &'sane CStr,
+    pub model: &'sane CStr,
+    pub type_: &'sane CStr,
 }
 
 impl DeviceDescription<'_> {
@@ -22,18 +22,19 @@ impl DeviceDescription<'_> {
         }
     }
 
-    pub fn open(&self) -> Result<Device> {
+    pub fn open(&self, _: &LibSane) -> Result<Device> {
         Device::open_device(self.name)
     }
 }
 
-pub struct DeviceList<'sane> {
+pub struct DeviceListIter<'sane> {
     devices: *mut *const SANE_Device,
+    position: isize,
     _phantomdata: PhantomData<&'sane ()>,
 }
 
-impl<'sane> DeviceList<'sane> {
-    pub fn get_devices(_libsane: &'sane LibSane, local_only: bool) -> Result<Self> {
+impl<'sane> DeviceListIter<'sane> {
+    pub(crate) fn new(_libsane: &'sane LibSane, local_only: bool) -> Result<Self> {
         let local_only = if local_only { 1 } else { 0 };
         let mut devices: *mut *const SANE_Device = std::ptr::null_mut();
         unsafe {
@@ -45,27 +46,16 @@ impl<'sane> DeviceList<'sane> {
 
         Ok(Self {
             devices,
+            position: 0,
             _phantomdata: PhantomData,
         })
     }
-
-    pub fn iter<'devlist>(&'devlist self) -> DeviceListIter<'devlist, 'sane> {
-        DeviceListIter {
-            device_list: self,
-            position: 0,
-        }
-    }
 }
 
-pub struct DeviceListIter<'devlist, 'sane> {
-    device_list: &'devlist DeviceList<'sane>,
-    position: isize,
-}
-
-impl<'devlist, 'sane> Iterator for DeviceListIter<'devlist, 'sane> {
-    type Item = DeviceDescription<'devlist>;
+impl<'sane> Iterator for DeviceListIter<'sane> {
+    type Item = DeviceDescription<'sane>;
     fn next(&mut self) -> Option<Self::Item> {
-        let ptr = self.device_list.devices.wrapping_offset(self.position);
+        let ptr = self.devices.wrapping_offset(self.position);
 
         unsafe {
             if (*ptr).is_null() {

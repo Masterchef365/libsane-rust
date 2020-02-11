@@ -4,6 +4,52 @@ use std::ffi::CStr;
 use std::num::NonZeroI32;
 
 #[derive(Debug)]
+pub struct OptionDescriptor<'a> {
+    pub name: Option<&'a CStr>,
+    pub title: Option<&'a CStr>,
+    pub description: Option<&'a CStr>,
+    pub value_type: ValueType,
+    pub capabilities: Capabilities,
+    pub unit: Unit,
+    pub size: SANE_Int,
+    pub constraint: Constraint<'a>,
+}
+
+#[derive(Debug)]
+pub enum ValueType {
+    Bool,
+    Int,
+    Fixed,
+    String,
+    Button,
+    Group,
+}
+
+#[derive(Debug)]
+pub struct Capabilities {
+    pub settable: Settable,
+    /// If set, this capability is not directly supported by the device and is instead emulated in the backend
+    pub emulated: bool,
+    /// If set, this capability indicates that the backend (or the device) is capable to picking a reasonable option value automatically.
+    pub automatic: bool,
+    /// If set, this capability indicates that the option is not currently active (e.g., because it's meaningful only if another option is set to some other value).
+    pub inactive: bool,
+    ///  If set, this capability indicates that the option should be considered an "advanced user option".
+    pub advanced: bool,
+}
+
+#[derive(Debug)]
+pub enum Settable {
+    /// The option value can only be set in software
+    Software,
+    /// The option value can only be by physical hardware (e.g. a switch)
+    Hardware {
+        /// The option's value is visible to software
+        software_visible: bool,
+    },
+}
+
+#[derive(Debug)]
 pub enum Unit {
     /// Value is unit-less (e.g., page count).
     None,
@@ -20,112 +66,6 @@ pub enum Unit {
     /// Value is time in µ-seconds.
     Microsecond,
 }
-
-// TODO: TryFrom?
-impl From<SANE_Unit> for Unit {
-    fn from(unit: SANE_Unit) -> Self {
-        match unit {
-            SANE_Unit_SANE_UNIT_NONE => Unit::None,
-            SANE_Unit_SANE_UNIT_PIXEL => Unit::Pixel,
-            SANE_Unit_SANE_UNIT_BIT => Unit::Bit,
-            SANE_Unit_SANE_UNIT_MM => Unit::MM,
-            SANE_Unit_SANE_UNIT_DPI => Unit::DPI,
-            SANE_Unit_SANE_UNIT_PERCENT => Unit::Percent,
-            SANE_Unit_SANE_UNIT_MICROSECOND => Unit::Microsecond,
-            _ => panic!("Unrecognized or unsupported unit specifier"),
-        }
-    }
-}
-
-impl Into<SANE_Unit> for Unit {
-    fn into(self) -> SANE_Unit {
-        match self {
-            Unit::None => SANE_Unit_SANE_UNIT_NONE,
-            Unit::Pixel => SANE_Unit_SANE_UNIT_PIXEL,
-            Unit::Bit => SANE_Unit_SANE_UNIT_BIT,
-            Unit::MM => SANE_Unit_SANE_UNIT_MM,
-            Unit::DPI => SANE_Unit_SANE_UNIT_DPI,
-            Unit::Percent => SANE_Unit_SANE_UNIT_PERCENT,
-            Unit::Microsecond => SANE_Unit_SANE_UNIT_MICROSECOND,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum Settable {
-    /// The option value can only be set in software
-    Software,
-    /// The option value can only be by physical hardware (e.g. a switch)
-    Hardware {
-        /// The option's value is visible to software
-        software_visible: bool,
-    },
-}
-
-#[derive(Debug)]
-pub struct Capabilities {
-    pub settable: Settable,
-    /// If set, this capability is not directly supported by the device and is instead emulated in the backend
-    pub emulated: bool,
-    /// If set, this capability indicates that the backend (or the device) is capable to picking a reasonable option value automatically.
-    pub automatic: bool,
-    /// If set, this capability indicates that the option is not currently active (e.g., because it's meaningful only if another option is set to some other value).
-    pub inactive: bool,
-    ///  If set, this capability indicates that the option should be considered an "advanced user option".
-    pub advanced: bool,
-}
-
-impl From<SANE_Int> for Capabilities {
-    fn from(cap: SANE_Int) -> Self {
-        let software_settable = cap >> 0 & 1 == 1;
-        let hardware_settable = cap >> 1 & 1 == 1;
-        let software_visible = cap >> 2 & 1 == 1;
-        let emulated = cap >> 3 & 1 == 1;
-        let automatic = cap >> 4 & 1 == 1;
-        let inactive = cap >> 5 & 1 == 1;
-        let advanced = cap >> 6 & 1 == 1;
-
-        let settable = match (software_settable, hardware_settable) {
-            // TODO: These should be mutually exclusive??
-            (true, _) => Settable::Software,
-            (false, _) => Settable::Hardware { software_visible },
-            //_ => panic!("Invalid capability bitfield"),
-        };
-
-        Self {
-            settable,
-            emulated,
-            automatic,
-            inactive,
-            advanced,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum ValueType {
-    Bool,
-    Int,
-    Fixed,
-    String,
-    Button,
-    Group,
-}
-
-impl From<SANE_Value_Type> for ValueType {
-    fn from(vt: SANE_Value_Type) -> Self {
-        match vt {
-            SANE_Value_Type_SANE_TYPE_BOOL => ValueType::Bool,
-            SANE_Value_Type_SANE_TYPE_BUTTON => ValueType::Int,
-            SANE_Value_Type_SANE_TYPE_FIXED => ValueType::Fixed,
-            SANE_Value_Type_SANE_TYPE_GROUP => ValueType::String,
-            SANE_Value_Type_SANE_TYPE_INT => ValueType::Button,
-            SANE_Value_Type_SANE_TYPE_STRING => ValueType::Group,
-            _ => panic!("Invalid value type"),
-        }
-    }
-}
-
 #[derive(Debug)]
 pub enum Constraint<'a> {
     None,
@@ -186,18 +126,6 @@ impl<'a> Constraint<'a> {
     }
 }
 
-#[derive(Debug)]
-pub struct OptionDescriptor<'a> {
-    pub name: Option<&'a CStr>,
-    pub title: Option<&'a CStr>,
-    pub description: Option<&'a CStr>,
-    pub value_type: ValueType,
-    pub capabilities: Capabilities,
-    pub unit: Unit,
-    pub size: SANE_Int,
-    pub constraint: Constraint<'a>,
-}
-
 unsafe fn optional_cstr<'a>(ptr: *const i8) -> Option<&'a CStr> {
     if ptr.is_null() {
         None
@@ -205,6 +133,79 @@ unsafe fn optional_cstr<'a>(ptr: *const i8) -> Option<&'a CStr> {
         Some(CStr::from_ptr(ptr))
     }
 }
+
+// TODO: TryFrom?
+impl From<SANE_Unit> for Unit {
+    fn from(unit: SANE_Unit) -> Self {
+        match unit {
+            SANE_Unit_SANE_UNIT_NONE => Unit::None,
+            SANE_Unit_SANE_UNIT_PIXEL => Unit::Pixel,
+            SANE_Unit_SANE_UNIT_BIT => Unit::Bit,
+            SANE_Unit_SANE_UNIT_MM => Unit::MM,
+            SANE_Unit_SANE_UNIT_DPI => Unit::DPI,
+            SANE_Unit_SANE_UNIT_PERCENT => Unit::Percent,
+            SANE_Unit_SANE_UNIT_MICROSECOND => Unit::Microsecond,
+            _ => panic!("Unrecognized or unsupported unit specifier"),
+        }
+    }
+}
+
+impl Into<SANE_Unit> for Unit {
+    fn into(self) -> SANE_Unit {
+        match self {
+            Unit::None => SANE_Unit_SANE_UNIT_NONE,
+            Unit::Pixel => SANE_Unit_SANE_UNIT_PIXEL,
+            Unit::Bit => SANE_Unit_SANE_UNIT_BIT,
+            Unit::MM => SANE_Unit_SANE_UNIT_MM,
+            Unit::DPI => SANE_Unit_SANE_UNIT_DPI,
+            Unit::Percent => SANE_Unit_SANE_UNIT_PERCENT,
+            Unit::Microsecond => SANE_Unit_SANE_UNIT_MICROSECOND,
+        }
+    }
+}
+
+impl From<SANE_Int> for Capabilities {
+    fn from(cap: SANE_Int) -> Self {
+        let software_settable = cap >> 0 & 1 == 1;
+        let hardware_settable = cap >> 1 & 1 == 1;
+        let software_visible = cap >> 2 & 1 == 1;
+        let emulated = cap >> 3 & 1 == 1;
+        let automatic = cap >> 4 & 1 == 1;
+        let inactive = cap >> 5 & 1 == 1;
+        let advanced = cap >> 6 & 1 == 1;
+
+        let settable = match (software_settable, hardware_settable) {
+            // TODO: These should be mutually exclusive??
+            (true, _) => Settable::Software,
+            (false, _) => Settable::Hardware { software_visible },
+            //_ => panic!("Invalid capability bitfield"),
+        };
+
+        Self {
+            settable,
+            emulated,
+            automatic,
+            inactive,
+            advanced,
+        }
+    }
+}
+
+impl From<SANE_Value_Type> for ValueType {
+    fn from(vt: SANE_Value_Type) -> Self {
+        match vt {
+            SANE_Value_Type_SANE_TYPE_BOOL => ValueType::Bool,
+            SANE_Value_Type_SANE_TYPE_BUTTON => ValueType::Int,
+            SANE_Value_Type_SANE_TYPE_FIXED => ValueType::Fixed,
+            SANE_Value_Type_SANE_TYPE_GROUP => ValueType::String,
+            SANE_Value_Type_SANE_TYPE_INT => ValueType::Button,
+            SANE_Value_Type_SANE_TYPE_STRING => ValueType::Group,
+            _ => panic!("Invalid value type"),
+        }
+    }
+}
+
+
 
 impl<'a> OptionDescriptor<'a> {
     pub(crate) fn from_descriptor(descriptor: &'a SANE_Option_Descriptor) -> Self {
@@ -230,7 +231,7 @@ pub struct OptionDescriptorIterator<'device, 'sane> {
 }
 
 impl<'device, 'sane> OptionDescriptorIterator<'device, 'sane> {
-    pub fn new(device: &'device Device<'sane>) -> Self {
+    pub(crate) fn new(device: &'device Device<'sane>) -> Self {
         let mut length: SANE_Int = 0;
         // TODO: Clean up this getter (Abstract elsewhere eventually)
         unsafe {
