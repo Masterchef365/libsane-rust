@@ -5,4 +5,4 @@ authors = ["Masterchef365 <duncan.freeman1@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-libsane-sys = { path = "../libsane-sys" }
+libsane = { path = "../libsane" }
