@@ -2,5 +2,4 @@
 members = [
     "libsane",
     "libsane-sys",
-    "sane-test",
 ]

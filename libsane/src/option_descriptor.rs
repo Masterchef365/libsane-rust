@@ -166,6 +166,7 @@ impl Into<SANE_Unit> for Unit {
 
 impl From<SANE_Int> for Capabilities {
     fn from(cap: SANE_Int) -> Self {
+        // TODO: Use a bitfield crate to do this?
         let software_settable = cap >> 0 & 1 == 1;
         let hardware_settable = cap >> 1 & 1 == 1;
         let software_visible = cap >> 2 & 1 == 1;
