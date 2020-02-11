@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "libsane",
+    "libsane-sys",
+    "sane-test",
+]
