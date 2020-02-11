@@ -281,8 +281,8 @@ impl From<SANE_Int> for Capabilities {
         let advanced = cap >> 6 & 1 == 1;
 
         let settable = match (software_settable, hardware_settable) {
-            (true, false) => Settable::Software,
-            (false, true) => Settable::Hardware { software_visible },
+            (true, _) => Settable::Software,
+            (false, _) => Settable::Hardware { software_visible },
             _ => panic!("Invalid capability bitfield"),
         };
 
@@ -380,22 +380,32 @@ impl<'a> Constraint<'a> {
 
 #[derive(Debug)]
 pub struct OptionDescriptor<'a> {
-    pub name: &'a CStr,
-    pub title: &'a CStr,
-    pub description: &'a CStr,
+    pub name: Option<&'a CStr>,
+    pub title: Option<&'a CStr>,
+    pub description: Option<&'a CStr>,
     pub value_type: ValueType,
+    pub capabilities: Capabilities,
     pub unit: Unit,
     pub size: SANE_Int,
     pub constraint: Constraint<'a>,
+}
+
+unsafe fn optional_cstr<'a>(ptr: *const i8) -> Option<&'a CStr> {
+    if ptr.is_null() {
+        None
+    } else {
+        Some(CStr::from_ptr(ptr))
+    }
 }
 
 impl<'a> OptionDescriptor<'a> {
     pub(crate) fn from_descriptor(descriptor: &'a SANE_Option_Descriptor) -> Self {
         unsafe {
             Self {
-                name: CStr::from_ptr(descriptor.name),
-                title: CStr::from_ptr(descriptor.title),
-                description: CStr::from_ptr(descriptor.desc),
+                name: optional_cstr(descriptor.name),
+                title: optional_cstr(descriptor.title),
+                description: optional_cstr(descriptor.desc),
+                capabilities: Capabilities::from(descriptor.cap),
                 constraint: Constraint::new(descriptor.constraint_type, &descriptor.constraint),
                 unit: descriptor.unit.into(),
                 size: descriptor.size,
@@ -413,8 +423,15 @@ pub struct OptionDescriptorIterator<'device, 'sane> {
 
 impl<'device, 'sane> OptionDescriptorIterator<'device, 'sane> {
     pub fn new(device: &'device Device<'sane>) -> Self {
-        //let ptr = sane_get_option_descriptor(device.get_handle(), 0);
-        //let length_descriptor = OptionDescriptor::from_descriptor(&*ptr);
+        let mut length: SANE_Int = 0;
+        unsafe {
+            let ptr = sane_get_option_descriptor(device.get_handle(), 0);
+            let length_descriptor = OptionDescriptor::from_descriptor(&*ptr);
+            let mut info: SANE_Int = 0;
+            SaneError::from_retcode(sane_control_option(device.get_handle(), 0, SANE_Action_SANE_ACTION_GET_VALUE, &mut length as *mut i32 as *mut std::ffi::c_void, &mut info as *mut i32)).unwrap()
+        }
+        println!("LENGTH: {}", length);
+
         let length = 1; //TODO
         Self {
             device,
@@ -428,7 +445,6 @@ impl<'device, 'sane> Iterator for OptionDescriptorIterator<'device, 'sane> {
     type Item = OptionDescriptor<'device>;
     fn next(&mut self) -> Option<Self::Item> {
         unsafe {
-            println!("ATTEMPTING READ: {}", self.position);
             let ptr = sane_get_option_descriptor(self.device.get_handle(), self.position);
             if ptr.is_null() {
                 None

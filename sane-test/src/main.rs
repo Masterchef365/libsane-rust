@@ -20,8 +20,8 @@ fn main() -> Result<(), SaneError> {
     */
     let device = sane.open("plustek:libusb:001:006")?;
     let options = OptionDescriptorIterator::new(&device);
-    for option in options {
-        println!("{:#?}", option);
+    for (idx, option) in options.enumerate() {
+        println!("{}: {:#?}", idx, option);
     }
     /*
     let devices = SaneDeviceList::get_devices(&sane, true)?;
