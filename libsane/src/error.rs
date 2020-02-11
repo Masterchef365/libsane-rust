@@ -1,5 +1,5 @@
-use std::fmt;
 use libsane_sys::*;
+use std::fmt;
 
 pub type Result<T> = std::result::Result<T, SaneError>;
 

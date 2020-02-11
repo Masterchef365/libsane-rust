@@ -1,7 +1,7 @@
-use libsane_sys::*;
-use std::{ffi::CStr, marker::PhantomData};
 use crate::error::{Result, SaneError};
 use crate::option_descriptor::OptionDescriptorIterator;
+use libsane_sys::*;
+use std::{ffi::CStr, marker::PhantomData};
 
 pub struct Device<'sane> {
     handle: SANE_Handle,

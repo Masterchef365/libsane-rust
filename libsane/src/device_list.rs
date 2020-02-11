@@ -1,6 +1,10 @@
-use std::{ffi::CStr, marker::PhantomData};
+use crate::{
+    device::Device,
+    error::{Result, SaneError},
+    LibSane,
+};
 use libsane_sys::*;
-use crate::{device::Device, LibSane, error::{Result, SaneError}};
+use std::{ffi::CStr, marker::PhantomData};
 
 #[derive(Debug)]
 pub struct DeviceDescription<'sane> {

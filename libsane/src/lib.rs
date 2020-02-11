@@ -1,13 +1,13 @@
 #![allow(non_upper_case_globals)]
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
-mod error;
-mod device_list;
 mod device;
+mod device_list;
+mod error;
 mod option_descriptor;
-pub use error::{SaneError, Result};
-pub use device_list::{DeviceListIter, DeviceDescription};
 pub use device::Device;
+pub use device_list::{DeviceDescription, DeviceListIter};
+pub use error::{Result, SaneError};
 pub use option_descriptor::*;
 
 use libsane_sys::*;

@@ -1,5 +1,5 @@
+use crate::{device::Device, error::SaneError};
 use libsane_sys::*;
-use crate::{error::SaneError, device::Device};
 use std::ffi::CStr;
 use std::num::NonZeroI32;
 
@@ -205,8 +205,6 @@ impl From<SANE_Value_Type> for ValueType {
         }
     }
 }
-
-
 
 impl<'a> OptionDescriptor<'a> {
     pub(crate) fn from_descriptor(descriptor: &'a SANE_Option_Descriptor) -> Self {
