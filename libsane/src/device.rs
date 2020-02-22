@@ -2,7 +2,7 @@ use crate::error::{Result, SaneError};
 use crate::option_descriptor::{OptionDescriptor, OptionDescriptorIterator, Settable, ValueType};
 use libsane_sys::*;
 use std::{
-    ffi::{c_void, CStr, CString},
+    ffi::{c_void, CStr},
     marker::PhantomData,
 };
 
@@ -11,7 +11,7 @@ pub struct Device<'sane> {
     _phantomdata: PhantomData<&'sane ()>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Bool(Box<[bool]>),
     Int(Box<[i32]>),
@@ -20,21 +20,12 @@ pub enum Value {
 }
 
 impl Value {
-    pub(crate) unsafe fn as_ptr(&self) -> *const c_void {
+    pub(crate) unsafe fn as_ptr(&self) -> *mut c_void {
         match self {
-            Value::Bool(b) => b.as_ptr() as *const std::ffi::c_void,
-            Value::Int(i) => i.as_ptr() as *const std::ffi::c_void,
-            Value::Fixed(i) => i.as_ptr() as *const std::ffi::c_void,
-            Value::String(s) => s.as_ptr() as *const std::ffi::c_void,
-        }
-    }
-
-    pub(crate) unsafe fn as_mut_ptr(&mut self) -> *mut c_void {
-        match self {
-            Value::Bool(b) => b.as_mut_ptr() as *mut std::ffi::c_void,
-            Value::Int(i) => i.as_mut_ptr() as *mut std::ffi::c_void,
-            Value::Fixed(i) => i.as_mut_ptr() as *mut std::ffi::c_void,
-            Value::String(s) => s.as_ptr() as *mut std::ffi::c_void,
+            Value::Bool(b) => b.as_ptr() as *mut c_void,
+            Value::Int(i) => i.as_ptr() as *mut c_void,
+            Value::Fixed(i) => i.as_ptr() as *mut c_void,
+            Value::String(s) => s.as_ptr() as *mut c_void,
         }
     }
 }
@@ -123,7 +114,7 @@ impl<'sane> Device<'sane> {
         OptionDescriptorIterator::new(self)
     }
 
-    pub fn set_option(&self, descriptor: &OptionDescriptor, value: &mut Value) -> Result<()> {
+    pub fn set_option(&self, descriptor: &OptionDescriptor, value: &Value) -> Result<()> {
         match (&value, descriptor.value_type) {
             (Value::Bool(_), ValueType::Bool) => (),
             (Value::Int(_), ValueType::Int) => (),
@@ -142,7 +133,7 @@ impl<'sane> Device<'sane> {
                 self.handle,
                 descriptor.number,
                 SANE_Action_SANE_ACTION_SET_VALUE,
-                value.as_mut_ptr(),
+                value.as_ptr() as *mut c_void,
                 std::ptr::null_mut(),
             ))?
         }
@@ -164,8 +155,8 @@ impl<'sane> Device<'sane> {
             _ => (),
         }
 
+        // TODO: This sucks fuck
         unsafe {
-            println!("SUMMONING {}", descriptor.number);
             SaneError::from_retcode(sane_control_option(
                 self.handle,
                 descriptor.number,

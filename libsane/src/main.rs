@@ -9,6 +9,11 @@ fn main() -> Result<()> {
     for option in device.options() {
         println!("{:?}", option);
         let value = device.get_option(&option)?;
+        if let Some(v) = &value {
+            device.set_option(&option, v)?;
+        }
+        let v2 = device.get_option(&option)?;
+        assert_eq!(value, v2);
         println!("\t{:?}", value);
     }
     //println!("{:#?}", res_option);
