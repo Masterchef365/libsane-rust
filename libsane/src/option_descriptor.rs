@@ -3,8 +3,11 @@ use libsane_sys::*;
 use std::ffi::CStr;
 use std::num::NonZeroI32;
 
+//TODO: Add descriptions for all items here
 #[derive(Debug)]
 pub struct OptionDescriptor<'a> {
+    /// This option's position in a description list
+    pub number: SANE_Int,
     pub name: Option<&'a CStr>,
     pub title: Option<&'a CStr>,
     pub description: Option<&'a CStr>,
@@ -15,7 +18,7 @@ pub struct OptionDescriptor<'a> {
     pub constraint: Constraint<'a>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum ValueType {
     Bool,
     Int,
@@ -25,7 +28,7 @@ pub enum ValueType {
     Group,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Capabilities {
     pub settable: Settable,
     /// If set, this capability is not directly supported by the device and is instead emulated in the backend
@@ -38,7 +41,7 @@ pub struct Capabilities {
     pub advanced: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Settable {
     /// The option value can only be set in software
     Software,
@@ -49,7 +52,7 @@ pub enum Settable {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Unit {
     /// Value is unit-less (e.g., page count).
     None,
@@ -196,18 +199,18 @@ impl From<SANE_Value_Type> for ValueType {
     fn from(vt: SANE_Value_Type) -> Self {
         match vt {
             SANE_Value_Type_SANE_TYPE_BOOL => ValueType::Bool,
-            SANE_Value_Type_SANE_TYPE_BUTTON => ValueType::Int,
+            SANE_Value_Type_SANE_TYPE_BUTTON => ValueType::Button,
             SANE_Value_Type_SANE_TYPE_FIXED => ValueType::Fixed,
-            SANE_Value_Type_SANE_TYPE_GROUP => ValueType::String,
-            SANE_Value_Type_SANE_TYPE_INT => ValueType::Button,
-            SANE_Value_Type_SANE_TYPE_STRING => ValueType::Group,
+            SANE_Value_Type_SANE_TYPE_GROUP => ValueType::Group,
+            SANE_Value_Type_SANE_TYPE_INT => ValueType::Int,
+            SANE_Value_Type_SANE_TYPE_STRING => ValueType::String,
             _ => panic!("Invalid value type"),
         }
     }
 }
 
 impl<'a> OptionDescriptor<'a> {
-    pub(crate) fn from_descriptor(descriptor: &'a SANE_Option_Descriptor) -> Self {
+    pub(crate) fn from_descriptor(descriptor: &'a SANE_Option_Descriptor, number: SANE_Int) -> Self {
         unsafe {
             Self {
                 name: optional_cstr(descriptor.name),
@@ -218,6 +221,7 @@ impl<'a> OptionDescriptor<'a> {
                 unit: descriptor.unit.into(),
                 size: descriptor.size,
                 value_type: descriptor.type_.into(),
+                number,
             }
         }
     }
@@ -248,7 +252,7 @@ impl<'device, 'sane> OptionDescriptorIterator<'device, 'sane> {
         Self {
             device,
             length,
-            position: 0, //1,
+            position: 0,
         }
     }
 }
@@ -261,8 +265,9 @@ impl<'device, 'sane> Iterator for OptionDescriptorIterator<'device, 'sane> {
             if self.position >= self.length || ptr.is_null() {
                 None
             } else {
+                let desc = OptionDescriptor::from_descriptor(&*ptr, self.position);
                 self.position += 1;
-                Some(OptionDescriptor::from_descriptor(&*ptr))
+                Some(desc)
             }
         }
     }

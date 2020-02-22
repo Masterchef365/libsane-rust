@@ -5,7 +5,8 @@ mod device;
 mod device_list;
 mod error;
 mod option_descriptor;
-pub use device::Device;
+//pub use device::{Device, Value};
+pub use device::*;
 pub use device_list::{DeviceDescription, DeviceListIter};
 pub use error::{Result, SaneError};
 pub use option_descriptor::*;
@@ -20,7 +21,6 @@ impl LibSane {
     pub fn init(callback: SANE_Auth_Callback) -> Result<Self> {
         let mut version: i32 = 0;
         unsafe {
-            //TODO: Implement callback
             SaneError::from_retcode(sane_init(&mut version as *mut i32, callback)).map(|_| LibSane)
         }
     }

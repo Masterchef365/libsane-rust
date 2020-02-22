@@ -2,16 +2,21 @@ use libsane::*;
 
 fn main() -> Result<()> {
     let sane = LibSane::init(None)?;
-
-    for device_desc in sane.list_devices(true)? {
-        println!("--- {} ---", device_desc.name.to_str().unwrap());
-        let device = device_desc.open(&sane)?;
-        for (idx, option) in device.options().enumerate() {
-            println!("{}: {:#?}", idx, option);
-        }
+    let device = sane.open_device("plustek:libusb:001:006")?;
+    //let options = device.options().collect::<Vec<_>>();
+    //let m = std::ffi::CString::new("resolution").unwrap();
+    //let res_option = options.iter().find(|&x| x.name == Some(m.as_c_str())).unwrap();
+    for option in device.options() {
+        println!("{:?}", option);
+        let value = device.get_option(&option)?;
+        println!("\t{:?}", value);
     }
-
-    //let device = sane.open_device("plustek:libusb:001:006")?;
+    //println!("{:#?}", res_option);
+    //println!("{:#?}", device.get_option(&res_option));
+    //device.set_option(&res_option, &mut Value::Int(1200))?;
+    //println!("{:#?}", device.get_option(&res_option));
+    //drop(device);
+    //drop(sane);
 
     Ok(())
 }
